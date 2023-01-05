@@ -1,0 +1,46 @@
+whole = header work1 work* 
+
+(* header = (par [lineend])+ *)
+header = blurp pubblurp lineend lineend lineend otsikko [alaotsikko lineend] [kirjoittaja] kirjoittaja lineend [lineend] [lineend] [lineend] julkaisutiedot [julkaisutiedot] lineend lineend+ 
+
+blurp = par
+
+pubblurp = par
+
+otsikko = par
+
+alaotsikko = par
+
+kirjoittaja = par
+
+julkaisutiedot = par
+
+<work> = worksep work1
+
+work1 =  (par [lineend] [lineend] [lineend] [lineend])+
+
+
+worksep = lineend lineend lineend lineend lineend 
+
+workhead = (par [lineend])+
+
+div = divsep (par [lineend])+
+divsep = lineend lineend [lineend] [lineend]
+
+
+
+par = (line / sepline)+ lineend
+onelinepar = line lineend
+line = [prefix] sentpart+  lineend
+sepline = (punct | space)+ punct (punct | space)* lineend
+<sentpart> = anyword | num | punct | space 
+prefix = (space | punct)+
+anyword = #"-*\p{IsL}[\p{IsL}-]*"
+cword = #"\p{IsLu}\p{IsLl}+"
+capword = #"\p{IsLu}+"
+word = #"\p{IsLl}+"
+space = #" +"
+punct = #"[\p{IsP}=*|¦__]"
+year = #"\d\d\d\d"
+num = #"\d+"
+lineend = #"\r\n|\z" 

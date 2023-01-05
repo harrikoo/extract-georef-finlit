@@ -1,0 +1,46 @@
+* Processing the /Projekti Lönnrot/ texts
+
+These code samples describe the various phases in transforming the
+/Projekti Lönnrot/ text files into TEI/XML documents, adding relevant
+metadata, running the documents through NER, and adding the results to
+the TEI/XML documents.
+
+The /Projekti Lönnrot/ text files are parsed using a EBNF-type
+grammer. The grammar can be found in [[file:resources/parser.bnf]].
+
+The library used to parse the text is Instaparse
+(https://github.com/Engelberg/instaparse), which returns the parse
+tree in Clojure-specific Enlive-format. This can be easily converted
+to an XML tree.
+
+This XML parse tree is converted to TEI using the XSL transform at
+[[file:resources/parse-to-tei.xsl]].
+
+The produced TEI/XML is split to individual documents using a simple
+XPath expression =//TEI[@xml:id]=.
+
+Metadata is added to each document using
+[[file:resources/tei-update-metadata.xsl]]. This transform also adds
+unique identifiers to the tokens.
+
+At this point, the tokens are extracted from the textual content of
+the TEI documents. In order to keep the running time of the NER
+service for each submitted text below the network timeout, the tokens
+are retrieved chunked by paragraphs. Each paragraph is then submitted
+to the NER analysis, and the results are collected.
+
+The token extraction is done using
+[[file:resources/tei-extract-tokens-chunk-p.xsl]].
+
+The combined results of the NER process are merged back into the data
+using the XSL transform [[file:resources/tei-update-token.xsl]]. This
+transform is run once for each recognized entity type in order to
+cover overlapping elements.
+
+Finally, the lemmas and POS analysis results returned by the
+tagger/anlyzes is merged back using
+[[file:resources/tei-update-token-with-lemma.xsl]].
+
+Most of the XSL transformations require features from XSLT 3.0 to run,
+and therefore they must be run using a processor with support for
+recent versions of XSLT and XPath.
