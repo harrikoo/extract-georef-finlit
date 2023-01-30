@@ -5,8 +5,6 @@ These code samples describe the various phases in transforming the
 metadata, running the documents through NER, and adding the results to
 the TEI/XML documents.
 
-The /Projekti Lönnrot/ text files are parsed using a EBNF-type
-grammer. The grammar can be found in [[file:resources/parser.bnf]].
 
 This sample repository uses the Clojure CLI to run the code, using
 =inf-clojure= under emacs. The dependencies are defined in
@@ -19,12 +17,15 @@ At first, we import the required libraries
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.java.shell :as sh]
+            [clojure.data.xml :as xml]
+            [clojure.data.csv :as csv]
+            [sigel.xslt.core :as xslt]
+            [sigel.xpath.core :as xpath]
             )
   )
 #+end_src
 
 #+RESULTS:
-: parser=>
 
 The, the data files used in this script are defined:
 #+begin_src clojure
@@ -35,14 +36,9 @@ The, the data files used in this script are defined:
 #+RESULTS:
 | #'parser/infile |
 
-The library used to parse the text is Instaparse
-(https://github.com/Engelberg/instaparse), which returns the parse
-tree in Clojure-specific Enlive-format. This can be easily converted
-to an XML tree.
-
+Read data file. Check the encoding before readings, using the =file= utility.
 
 #+begin_src clojure
-
 (defn getencoding [path]
   (str/trim (:out (sh/sh "file" "-b" "--mime-encoding" (str path) ))))
 
@@ -51,25 +47,139 @@ to an XML tree.
         ]
     (slurp infile :encoding encoding)))
 
-(def parser (insta/parser (io/resource "parser.bnf") :output-format :enlive))
-
-(subs (readdatafile) 0 100)
+(def indata (readdatafile))
 #+end_src
 
 #+RESULTS:
 | #'parser/getencoding |
 
+The library used to parse the text is Instaparse
+(https://github.com/Engelberg/instaparse), which returns the parse
+tree in Clojure-specific Enlive-format. This can be easily converted
+to an XML tree.
+
+The /Projekti Lönnrot/ text files are parsed using a EBNF-type
+grammer. The grammar can be found in [[file:resources/parser.bnf]].
+
+#+begin_src clojure
+(def parser (insta/parser (io/resource "parser.bnf") :output-format :enlive))
+
+(def inparse (insta/parse parser indata))
+
+(def inparse-xml (xml/emit-str inparse))
+#+end_src
+
+#+RESULTS:
+| #'parser/parser |
+| parser=>        |
+
 
 This XML parse tree is converted to TEI using the XSL transform at
 [[file:resources/parse-to-tei.xsl]].
+
+#+begin_src clojure
+(defn xmltotei [xmltext basename]
+  (let [xslt-to-tei (xslt/compile-xslt (io/resource "parse-to-tei.xsl"))
+        ]
+    (xslt/transform xslt-to-tei {:basename basename} xmltext )))
+
+(def teidoc (xmltotei inparse-xml "0050"))
+#+end_src
+
+#+RESULTS:
+: #'parser/xmltotei
+: parser=>
 
 
 The produced TEI/XML is split to individual documents using a simple
 XPath expression =//TEI[@xml:id]=.
 
+#+begin_src clojure
+(def teicompiler
+  "Create an XPath compiler"
+  (xpath/compiler))
+
+; Set the default to TEI namespace
+(xpath/set-default-namespace! teicompiler "http://www.tei-c.org/ns/1.0")
+
+(defn selectteichildrenwithid
+  "Selects TEI children that have xml:id set
+
+  At this point of the conversion process, this is valid only for TEI
+  elements that contain recognized works.
+  "
+  [dt]
+  (seq (xpath/select teicompiler dt "//TEI[@xml:id]" ())))
+
+(def teidocs
+  "Select the children, return as sequence"
+  (selectteichildrenwithid teidoc))
+#+end_src
+
+#+RESULTS:
+| #'parser/teicompiler |
+
 Metadata is added to each document using
 [[file:resources/tei-update-metadata.xsl]]. This transform also adds
 unique identifiers to the tokens.
+
+At first we need to get the metadata for the document. All the
+metadata is in one TSV file, which is searched for the relevant lines:
+#+begin_src clojure
+(def metadatafile "Lönnrot-corpus-metadata.tsv")
+
+(defn getmetadata [lonnrotid]
+  (let [id (Integer/parseInt lonnrotid)
+        ]
+    (with-open [reader (io/reader (io/resource metadatafile)) ]
+      (->> (csv/read-csv reader :separator \tab :quote \ß)
+           (drop 1)
+           (filter #(= (Integer/parseInt (nth % 0)) id))
+           (into [])
+           ))))
+
+(def metadata (getmetadata "0050"))
+#+end_src
+
+#+RESULTS:
+| #'parser/metadatafile |
+
+Then we process the documents for metadata:
+#+begin_src clojure
+(defn processone [xmls metadata]
+  (let [author (str (nth metadata 3) " " (nth metadata 4))
+        title (str (nth metadata 2))
+        year (str (nth metadata 7))
+        xsltmeta (xslt/compile-xslt (io/resource "tei-update-metadata.xsl"))
+        filebase (xpath/value-of teicompiler xmls "./@xml:id" ())
+        ]
+    (xslt/transform 
+     xsltmeta
+     {:docid filebase :author author :title title :year year }
+     xmls
+     )))
+
+(defn processdata [id dtc metadata]
+  (map processone dtc metadata)
+  )
+  
+
+
+(defn setmetadata
+  "Set metadata for all works in parse and save to file."
+  []
+  (let [metacount (count metadata)
+        ]
+    (cond 
+      (= metacount (count teidocs)) (processdata "0050" teidocs metadata)
+      (= (count teidocs) (+ metacount 1)) (processdata "0050" (drop 1 teidocs) metadata)
+      true nil)))
+
+(def teidocs-meta (setmetadata))
+#+end_src
+
+#+RESULTS:
+| #'parser/processone |
 
 At this point, the tokens are extracted from the textual content of
 the TEI documents. In order to keep the running time of the NER
