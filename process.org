@@ -8,13 +8,61 @@ the TEI/XML documents.
 The /Projekti Lönnrot/ text files are parsed using a EBNF-type
 grammer. The grammar can be found in [[file:resources/parser.bnf]].
 
+This sample repository uses the Clojure CLI to run the code, using
+=inf-clojure= under emacs. The dependencies are defined in
+[[file:deps.edn]]
+
+At first, we import the required libraries
+#+begin_src clojure
+(ns parser
+  (:require [instaparse.core :as insta]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.java.shell :as sh]
+            )
+  )
+#+end_src
+
+#+RESULTS:
+: parser=>
+
+The, the data files used in this script are defined:
+#+begin_src clojure
+(def infile (io/as-file (io/resource "0050.txt")))
+(def outfile (io/as-file (io/resource "0050-tei.xml")))
+#+end_src
+
+#+RESULTS:
+| #'parser/infile |
+
 The library used to parse the text is Instaparse
 (https://github.com/Engelberg/instaparse), which returns the parse
 tree in Clojure-specific Enlive-format. This can be easily converted
 to an XML tree.
 
+
+#+begin_src clojure
+
+(defn getencoding [path]
+  (str/trim (:out (sh/sh "file" "-b" "--mime-encoding" (str path) ))))
+
+(defn readdatafile []
+  (let [encoding (getencoding infile)
+        ]
+    (slurp infile :encoding encoding)))
+
+(def parser (insta/parser (io/resource "parser.bnf") :output-format :enlive))
+
+(subs (readdatafile) 0 100)
+#+end_src
+
+#+RESULTS:
+| #'parser/getencoding |
+
+
 This XML parse tree is converted to TEI using the XSL transform at
 [[file:resources/parse-to-tei.xsl]].
+
 
 The produced TEI/XML is split to individual documents using a simple
 XPath expression =//TEI[@xml:id]=.
