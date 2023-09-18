@@ -191,6 +191,26 @@ Select one work for further processing:
 (def teidoc1 (first teidocs-meta))
 #+end_src
 
+Provide some basic data on the resulting TEI text:
+
+#+begin_src clojure :results value
+(defn textname [xml]
+  (str (first (xpath/select teicompiler teidoc1 "//title/text()" ()))
+   " by "
+       (first (xpath/select teicompiler teidoc1 "//author/text()" ())) ". "))
+
+(defn numberoftokens [xml]
+  (count (seq (xpath/select teicompiler xml "//(w|pc|num)" ()))))
+
+(defn textreport [xml]
+  (println (str "Text: " (textname xml)  "Number of tokens: " (numberoftokens xml))))
+
+(textreport teidoc1)
+#+end_src
+
+#+RESULTS:
+| #'parser/textname |
+
 At this point, the tokens are extracted from the textual content of
 the TEI documents. In order to keep the running time of the NER
 service for each submitted text below the network timeout, the tokens
