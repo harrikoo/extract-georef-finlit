@@ -1,4 +1,7 @@
 * Processing the /Projekti Lönnrot/ texts
+:PROPERTIES:
+:session:clojure: lönnrot
+:END:
 
 These code samples describe the various phases in transforming the
 /Projekti Lönnrot/ text files into TEI/XML documents, adding relevant
@@ -144,7 +147,9 @@ metadata is in one TSV file, which is searched for the relevant lines:
 #+RESULTS:
 | #'parser/metadatafile |
 
-Then we process the documents for metadata:
+Then we process the documents for metadata. The XSL also adds a serial ID to the tokens. See [[file:resources/tei-update-metadata.xsl]].
+
+The function =setmetadata= counts the number of documents the converted TEI file is supposed to include, and extracts the TEI subelements from the file; these are individual works in the metadata. The Lönnrot corpus has been created by digitising single /volumes/ which actually may include several individual works.
 #+begin_src clojure
 (defn processone [xmls metadata]
   (let [author (str (nth metadata 3) " " (nth metadata 4))
@@ -180,6 +185,11 @@ Then we process the documents for metadata:
 
 #+RESULTS:
 | #'parser/processone |
+
+Select one work for further processing:
+#+begin_src clojure
+(def teidoc1 (first teidocs-meta))
+#+end_src
 
 At this point, the tokens are extracted from the textual content of
 the TEI documents. In order to keep the running time of the NER
