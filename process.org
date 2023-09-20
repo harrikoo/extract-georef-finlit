@@ -22,6 +22,7 @@ At first, we import the required libraries
             [clojure.java.shell :as sh]
             [clojure.data.xml :as xml]
             [clojure.data.csv :as csv]
+            [clojure.edn :as edn]
             [sigel.xslt.core :as xslt]
             [sigel.xpath.core :as xpath]
             )
@@ -210,6 +211,11 @@ Provide some basic data on the resulting TEI text:
 
 #+RESULTS:
 | #'parser/textname |
+
+#+begin_src clojure
+(def config (edn/read-string (slurp (io/resource "config.edn"))))
+
+#+end_src
 
 At this point, the tokens are extracted from the textual content of
 the TEI documents. In order to keep the running time of the NER
