@@ -1,6 +1,7 @@
 * Processing the /Projekti Lönnrot/ texts
 :PROPERTIES:
 :session:clojure: lönnrot
+:header-args:clojure: :tangle yes
 :END:
 
 These code samples describe the various phases in transforming the
@@ -13,7 +14,8 @@ This sample repository uses the Clojure CLI to run the code, using
 =inf-clojure= under emacs. The dependencies are defined in
 [[file:deps.edn]]
 
-At first, we import the required libraries
+At first, we import the required libraries. This imports all libraries
+required by the process.
 #+begin_src clojure
 (ns parser
   (:require [instaparse.core :as insta]
@@ -35,8 +37,9 @@ At first, we import the required libraries
 #+end_src
 
 #+RESULTS:
+: parser=>
 
-The, the data files used in this script are defined:
+The data files used in this script are defined:
 #+begin_src clojure
 (def infile (io/as-file (io/resource "0050.txt")))
 (def teifile (io/file "0050-tei.xml"))
@@ -45,6 +48,8 @@ The, the data files used in this script are defined:
 
 #+RESULTS:
 | #'parser/infile |
+
+The file "0050.txt" is included as resource because it is delivered as a sample. The =teifile= is the intermediate result from the conversion to TEI/XML, and the =nerfile= is the annotated end result.
 
 Read data file. Check the encoding before readings, using the =file= utility.
 
@@ -62,6 +67,8 @@ Read data file. Check the encoding before readings, using the =file= utility.
 
 #+RESULTS:
 | #'parser/getencoding |
+
+This is a hackish solution in order to use text files whose encoding is not known in advance. The =file= utility can be found on both Linux and MacOS, and gives quite good results in assessing the file encoding.
 
 The library used to parse the text is Instaparse
 (https://github.com/Engelberg/instaparse), which returns the parse
@@ -172,7 +179,6 @@ The function =setmetadata= counts the number of documents the converted TEI file
 (defn processdata [id dtc metadata]
   (map processone dtc metadata)
   )
-  
 
 (defn setmetadata
   "Set metadata for all works in parse and save to file."
@@ -212,7 +218,11 @@ Provide some basic data on the resulting TEI text:
   (println (str "Text: " (textname xml)  "Number of tokens: " (numberoftokens xml))))
 
 (textreport teidoc1)
+#+end_src
 
+Write the resulting XML to file.
+
+#+begin_src clojure
 (defn write-saxon-xml-to-file
   "In order to preserve spaces in the XML, the default serialization of
   Clojure XML libraries is not good. Therefore, we use Saxon-specific
@@ -226,8 +236,52 @@ Provide some basic data on the resulting TEI text:
 (write-saxon-xml-to-file teidoc1 teifile)
 #+end_src
 
-#+RESULTS:
-| #'parser/textname |
+Clojure has its own XML serialization functions, but the XSL(T)
+processing here is done using the Sigel library which uses Saxon XML
+libraries in the background, and these are not exactly the same. A
+simple serialization to string loses the spacing in mixed-mode
+elements (i.e. elements including both text and other elements, like
+is typical for text), which in turn breaks the data. When serialized
+using the Saxon serializer, the data structure is preserved.
+
+** NER and lemmatization of the TEI files
+
+The process described here is used to run the NER and the
+lemmatization processes for a single TEI/XML file. This cannot be used
+for any TEI file, however. The file must be prepared specifically so
+that the results can be merged back to the XML file without
+problems. In this case, the requirements are:
+- Each token (word, punctuation, number) must be enclosed in the
+  respective TEI tag (=w=, =pc=, =num=), thus creating a token
+  element;
+- Each element thus created must have a unique =id= attribute.
+
+
+The process extracts all tokens, collects them into a list with the
+id's, and uses this list with id's to merge the results back to the
+original XML files.
+
+This process sounds complicated, but is actually very fast, because of
+the capabilities of the modern versions of the Saxon libraries. The
+merging back of results for an XML file with tens of thousands of
+tokens takes a few second at most on a decade old Linux laptop.
+
+The token extraction is done using
+[[file:resources/tei-extract-tokens-chunk-p.xsl]].
+
+The combined results of the NER process are merged back into the data
+using the XSL transform [[file:resources/tei-update-token.xsl]]. This
+transform is run once for each recognized entity type in order to
+cover overlapping elements.
+
+Finally, the lemmas and POS analysis results returned by the
+tagger/anlyzes is merged back using
+[[file:resources/tei-update-token-with-lemma.xsl]].
+
+Most of the XSL transformations require features from XSLT 3.0 to run,
+and therefore they must be run using a processor with support for
+recent versions of XSLT and XPath.
+
 
 Read configuration data from external file. This file has data on the
 URI's of the APIs used in the next stage.
@@ -240,32 +294,14 @@ URI's of the APIs used in the next stage.
 : #'parser/config
 : parser=>
 
+Some definitions that are needed later
 #+begin_src clojure
-
 (def ner-api (:ner-api config))
 (def parser-api (:parser-api config))
 (def xpath-tei-comp (xpath/compiler processor "http://www.tei-c.org/ns/1.0" () ))
-
-;; (defn file-to-wordlist
-;;   "Extract tokens from TEI file.
-
-;;   Argument:
-;;   - any object implementing the sigel XMLSource protocol
-;;     [sigel.protocols/XMLSource]
-;;   Returns:
-;;   - vector of text lines, each line containing the token id
-;;   sperated with TAB from content."
-;;   [file]
-;;   {:pre [(extends? sigel.protocols/XMLSource (type file))]
-;;    :post [(vector? %)]}
-;;   (let [xslttokenextract (xslt/compile-xslt (io/resource "tokenextract.xsl"))
-;;         ]
-;;     (tap> (str "file-to-wordlist:" file))
-;;     (-> (xslt/transform xslttokenextract file)
-;;         str
-;;         str/split-lines
-;;         )))
-
+#+end_src
+Read source XML and extract tokens
+#+begin_src clojure
 (defn file-to-par-wordlists
   "Extract tokens from TEI file, return a list chunked by paragraph
 
@@ -328,7 +364,9 @@ URI's of the APIs used in the next stage.
    :post [(string? %)]}
   (str/join " "  (map #(second (str/split % #"\t")) wl))
   )
-
+#+end_src
+Run the actual NER and parse prosesses using the external APIs.
+#+begin_src clojure
 (defn tokenlist-ner [tl]
   "Run NER process for list of tokens."
   (str/split-lines
@@ -341,7 +379,9 @@ URI's of the APIs used in the next stage.
   (str/split-lines
    (:body
     (httpclient/post parser-api {:body tl :socket-timeout 300000 :connection-timeout 300000}))))
-
+#+end_src
+Merge results back.
+#+begin_src clojure
 (defrecord Word-NerdataRec [id word type])
 (s/def ::word_nerdatarecord
   (s/keys :req-un [::id ::word ::type]))
@@ -393,12 +433,9 @@ URI's of the APIs used in the next stage.
         [wordid wordword] (str/split originaldata #"\t" 2)
         ]
     (when (not (= form wordword)) (throw (ex-info "Parse-data not aligned with token data")))
-    ;; {:id wordid :word form :lemma lemma :upos upos :xpos xpos :feats feats :head head :deprel deprel :deps deps :misc misc}
+
     (->Word-ParsedataRec wordid form lemma upos xpos feats head deprel deps misc)
     ))
-                                        ; lemma -> @lemma (or @lemmaRef)
-                                        ; upos -> @pos
-                                        ; feats -> @msd
 
 (defn merge-nerlist-wordlist
   "Merge result from NER with the original wordlist
@@ -412,12 +449,6 @@ URI's of the APIs used in the next stage.
   [nerresultlist wl]
   (map merge-nertoken-word nerresultlist wl))
 
-;; lemmatisointi tulee seuraavan rinnalle, samankaltaisena
-;; operaationa. wl käy sellaisenaa, sitten tulee wordlist-to-tokens-ws,
-;; sitten tokenlist-parse. merge pitä muuttaa siten, että se lukee
-;; molemmat listat samalla, yhdistävänä avaimena molemmissa pitäisi olla
-;; token.
-
 (defn merge-parselist-wordlist
   "Merge results from parse process with original wordlist
 
@@ -430,7 +461,9 @@ URI's of the APIs used in the next stage.
   "
   [pl wl]
   (map merge-parse-word pl wl))
+#+end_src
 
+#+begin_src clojure
 (defn process-ner-wordlist
   "Combines the NER process for a wordlist"
   [wl]
@@ -482,7 +515,9 @@ URI's of the APIs used in the next stage.
   (reduce into (map process-lemma-wordlist wls)))
 
 ;; end of ner- and lemmatization/parse processes
+#+end_src
 
+#+begin_src clojure
 (defn select-ontonotesNE-type
   "Filter nerdata list for entries with a particular entity type
 
@@ -517,7 +552,7 @@ URI's of the APIs used in the next stage.
               (throw (ex-info (str "Unexpected data " (first datalist)))))))))))
     
 
-(defn- get-annotations-for-entitytype
+(defn get-annotations-for-entitytype
   [nerdatalist entitytype]
   {:pre [(s/valid? (s/coll-of ::word_nerdatarecord) nerdatalist)]
    :post [(s/valid? (s/coll-of (s/coll-of string?)) %)]}
@@ -526,7 +561,7 @@ URI's of the APIs used in the next stage.
         (collect-ners entitytype)
         ))
 
-(defn- get-annotations-for-annotationtype
+(defn get-annotations-for-annotationtype
   "Selects all annotations for one annotation type
 
   "
@@ -537,11 +572,11 @@ URI's of the APIs used in the next stage.
 
 
   ; Seuraavat kolme pitää saada siirrettyä yo. prosessin sisään eli tyyppikohtaisiksi.
-(defn- idseq
+(defn idseq
   [entitytype xmlid n]
   (cons (str xmlid "-annotation-" entitytype "-" n) (lazy-seq (idseq entitytype xmlid (inc n)))))
 
-(defn- idseq-annotationtype [annotype xmlid n]
+(defn idseq-annotationtype [annotype xmlid n]
   (let [entitytype (:nametypeattribute annotype)]
     (idseq entitytype xmlid n)))
 
@@ -552,7 +587,7 @@ URI's of the APIs used in the next stage.
    }
   {:key (first pers) :xmlid xmlid :other (rest pers)})
 
-(defn- create-processing-list
+(defn create-processing-list
   [persl entitytype xmlid]
   (map process-map-entry
          (reverse persl)
@@ -630,9 +665,6 @@ URI's of the APIs used in the next stage.
         ]
     (xslt/transform xslt params sf)))
 
-(defn make-transform [reclist annotype xmlid source]
-  )
-
 (defn write-transform-result-to-file
   "It is difficult to user transform-to-file when you want to pipe transforms.
 
@@ -644,7 +676,7 @@ URI's of the APIs used in the next stage.
     (.close ser)))
 
 (defn process-annotype
-  "This created chainable transforms
+  "Chainable transform
 
   "
   [xmlin reclist entitytype xmlid]
@@ -664,7 +696,25 @@ URI's of the APIs used in the next stage.
 (def annotationtypes
   "List of OntonoteNE annotation types processed."
   '("PERSON" "NORP" "FAC" "ORG" "GPE" "LOC" "PRODUCT" "EVENT" "WORK_OF_ART" "LAW" "LANGUAGE" "DATE" "TIME" "PERCENT" "MONEY" "QUANTITY" "ORDINAL" "CARDINAL"))
+#+end_src
 
+This is the main function to process one TEI/XML file.
+
+It first collects the individual words from the XML file to list of
+wordlists, chunked by paragraph (~wordlists-par~). It then processes
+these lists through both the NER and the language parser (~nerlist~
+and ~lemmalist~). First, the XML is processed with ~nerlist~ for each
+individual annotation type and the results are merged to the XML
+file. This is a reduce process so that the results of one NER
+annotation type are already present when the XML is processed for the
+next annotation type.
+
+After this process, the whole NER-annotated XML is further annotated
+with the lemmatization and other language parsing data from the
+language parser process.
+
+At the end, the final product is written to and XML file.
+#+begin_src clojure
 (defn ner-tei-file
   "Runs the ner- and lemmatization processes for one file in source dataset.
 
@@ -695,11 +745,7 @@ URI's of the APIs used in the next stage.
 #+RESULTS:
 | #'parser/ner-api |
 
-At this point, the tokens are extracted from the textual content of
-the TEI documents. In order to keep the running time of the NER
-service for each submitted text below the network timeout, the tokens
-are retrieved chunked by paragraphs. Each paragraph is then submitted
-to the NER analysis, and the results are collected.
+This actually calls the function above and runs the whole NER and lemmatization process for the files defined above.
 
 #+begin_src clojure
 (ner-tei-file teifile nerfile)
@@ -707,18 +753,3 @@ to the NER analysis, and the results are collected.
 
 #+RESULTS:
 
-The token extraction is done using
-[[file:resources/tei-extract-tokens-chunk-p.xsl]].
-
-The combined results of the NER process are merged back into the data
-using the XSL transform [[file:resources/tei-update-token.xsl]]. This
-transform is run once for each recognized entity type in order to
-cover overlapping elements.
-
-Finally, the lemmas and POS analysis results returned by the
-tagger/anlyzes is merged back using
-[[file:resources/tei-update-token-with-lemma.xsl]].
-
-Most of the XSL transformations require features from XSLT 3.0 to run,
-and therefore they must be run using a processor with support for
-recent versions of XSLT and XPath.
