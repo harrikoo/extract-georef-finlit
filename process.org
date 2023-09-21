@@ -4,16 +4,63 @@
 :header-args:clojure: :tangle yes
 :END:
 
-These code samples describe the various phases in transforming the
+** General and prerequisites
+This code sample describes the various phases in transforming the
 /Projekti Lönnrot/ text files into TEI/XML documents, adding relevant
 metadata, running the documents through NER, and adding the results to
 the TEI/XML documents.
 
+This is an annotated Org-mode document containing the Clojure code for
+running the transformation and analysis process. This file can be run
+using the Emacs editor package Org-mode and org-babel. The complete
+code can also be found in the file [[file:process.clj]] which forms a
+complete Clojure program.
 
-This sample repository uses the Clojure CLI to run the code, using
-=inf-clojure= under emacs. The dependencies are defined in
-[[file:deps.edn]]
+There are several prerequisites you need for running this code.
 
+1. Install Java. OpenJDK is good, this runs at least on version 11,
+   but since the code is mostly Clojure, the Java version should not
+   matter.
+2. Install Clojure. The recommended install is descibed here:
+   https://clojure.org/guides/install_clojure. The code has been
+   developed and tested using this version of clojure.
+    1. The dependencies are defined in [[file:deps.edn]] which is
+       different from what /e.g./ Leiningen uses, so in order to run
+       this code with Leiningen, you need to define the dependencies
+       suitably.
+3. Install the TurkuNLP libraries as API services, and define their
+   URI's in =resources/config.edn=. There is a sample config file at
+   [[file:resources/config.edn.sample]].
+    1. Install the Finnish Parser
+       (https://turkunlp.org/parser.html). For our purposes, we made
+       some minor modifications to the code base, and the modified
+       version can be found at Github
+       (https://github.com/harrikoo/Turku-neural-parser-pipeline/tree/4b44f2dc76a59552217c549179cb610acdbe4d6d). It
+       is not altogether simple to get this running as a service.
+    2. Install the Finnish NER
+       (https://turkunlp.org/fin-ner.html). For our purposes, some
+       minor modifications to the code were made, like adding the
+       support for POST requests. The modified version can be found at
+       Github
+       (https://github.com/harrikoo/keras-bert-ner/tree/9dcdba1a1e7f27cfb15dd7afc874e9beb13022b8).
+4. (You can also run the code without the TurkuNLP packages, this only
+   converts the plain text file to TEI/XML. This can be useful as it
+   is.)
+
+       
+
+Once the prerequisites are in place, you can run the code with
+#+begin_src shell
+clojure process.clj
+#+end_src
+
+The NLP services speed depend quite much on the server capabilities they are installed on. In our project setup, the parsing of the test file included into TEI/XML takes some tens of seconds, and the following NER and lemmatization on the CSC cloud instance ca. 9 minutes. Your mileage may wary.
+
+Running the code from within Emacs Org-mode may also fail, because of the long duration, but on the command line, everything should work fine.
+
+The org-babel functionality has been tested with =inf-clojure=, and seems to work.
+
+** Conversion from plain text to TEI/XML
 At first, we import the required libraries. This imports all libraries
 required by the process.
 #+begin_src clojure
@@ -282,12 +329,10 @@ Most of the XSL transformations require features from XSLT 3.0 to run,
 and therefore they must be run using a processor with support for
 recent versions of XSLT and XPath.
 
-
 Read configuration data from external file. This file has data on the
 URI's of the APIs used in the next stage.
 #+begin_src clojure
 (def config (edn/read-string (slurp (io/resource "config.edn"))))
-
 #+end_src
 
 #+RESULTS:
