@@ -14,3 +14,11 @@ easily adaptable for running elsewhere.
 
 The files included in this repository contain the work that is most
 relevant for the actual processing of the data.
+
+The file <file:process.org> is an annotated document describing the
+code that converts the plain text files first to TEI/XML, and then
+runs the texts through TurkuNLP-teams language parser and NER tools.
+
+The file <file:process.clj> contains code as runnable Clojure
+program. See <file:process.org> for details on using this code.
+
