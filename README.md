@@ -22,3 +22,6 @@ runs the texts through TurkuNLP-teams language parser and NER tools.
 The file <file:process.clj> contains code as runnable Clojure
 program. See <file:process.org> for details on using this code.
 
+The original dataset for this tool is /Atlas of the Finnish
+Literature/ dataset, DOI: 10.5281/zenodo.8365866
+
