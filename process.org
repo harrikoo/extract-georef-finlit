@@ -31,15 +31,15 @@ There are several prerequisites you need for running this code.
 3. Install the TurkuNLP libraries as API services, and define their
    URI's in =resources/config.edn=. There is a sample config file at
    [[file:resources/config.edn.sample]].
-    1. Install the Finnish Parser
-       (https://turkunlp.org/parser.html). For our purposes, we made
-       some minor modifications to the code base, and the modified
-       version can be found at Github
+    1. Install the Finnish Parser (https://turkunlp.org/parser.html;
+       https://github.com/TurkuNLP/Turku-neural-parser-pipeline). For
+       our purposes, we made some minor modifications to the code
+       base, and the modified version can be found at Github
        (https://github.com/harrikoo/Turku-neural-parser-pipeline/tree/4b44f2dc76a59552217c549179cb610acdbe4d6d). It
        is not altogether simple to get this running as a service.
-    2. Install the Finnish NER
-       (https://turkunlp.org/fin-ner.html). For our purposes, some
-       minor modifications to the code were made, like adding the
+    2. Install the Finnish NER (https://turkunlp.org/fin-ner.html;
+       https://github.com/spyysalo/keras-bert-ner). For our purposes,
+       some minor modifications to the code were made, like adding the
        support for POST requests. The modified version can be found at
        Github
        (https://github.com/harrikoo/keras-bert-ner/tree/9dcdba1a1e7f27cfb15dd7afc874e9beb13022b8).
